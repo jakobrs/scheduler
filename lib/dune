@@ -1,0 +1,4 @@
+(library
+ (name scheduler)
+ (libraries unix)
+ (foreign_stubs (language c) (names bindings)))
