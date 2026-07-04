@@ -9,6 +9,14 @@ let f () =
   let n = Epoll.read ~fd:stdin ~buf ~count:10 in
   Printf.printf "Read %d bytes\n%!" n;
 
+  Runtime.spawn_u begin fun () ->
+    let stdout = Lazy.force Epoll.stdout in
+    while true do
+      let n = Epoll.read ~fd:stdin ~buf ~count:20 in
+      ignore @@ Epoll.write ~fd:stdout ~buf ~count:n
+    done
+  end ();
+
   let timer_job id interval : unit =
     let timer = Timer.create interval in
     for i = 1 to 20 do
