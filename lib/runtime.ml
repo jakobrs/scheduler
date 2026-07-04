@@ -1,11 +1,13 @@
 open Effect.Shallow
 
-type epoll_manager = { epfd : Unix.file_descr; managed : (Unix.file_descr, managed_fd) Hashtbl.t }
-and managed_fd = { manager : epoll_manager; fd : Unix.file_descr; mutable awaiters : (unit, unit) continuation list }
+type _epoll_manager = { epfd : Unix.file_descr; managed : (Unix.file_descr, _some_managed_fd) Hashtbl.t }
+and 'a _managed_fd = { manager : _epoll_manager; fd : Unix.file_descr; mutable awaiters : (unit, unit) continuation list }
+  constraint 'a = [< `R | `W ]
+and _some_managed_fd = SomeManagedFd : [< `R | `W ] _managed_fd -> _some_managed_fd
 
 type ctx = {
   sched : 'a. ('a, unit) continuation -> 'a -> unit;
-  ep : epoll_manager;
+  ep : _epoll_manager;
   queued_tasks : unit -> int;
   live_tasks : int ref;
 }
@@ -39,11 +41,13 @@ module Epoll = struct
 
   type fd = Unix.file_descr
 
-  type t = epoll_manager = { epfd : fd; managed : (fd, managed_fd) Hashtbl.t }
-  type nonrec managed_fd = managed_fd = { manager : t; fd : fd; mutable awaiters : (unit, unit) continuation list }
+  type t = _epoll_manager = { epfd : fd; managed : (fd, some_managed_fd) Hashtbl.t }
+  and 'a managed_fd = 'a _managed_fd = { manager : t; fd : fd; mutable awaiters : (unit, unit) continuation list }
+    constraint 'a = [< `R | `W ]
+  and some_managed_fd = _some_managed_fd = SomeManagedFd : [< `R | `W ] managed_fd -> some_managed_fd
 
   external epoll_create : unit -> fd = "ocaml_epoll_create"
-  external epoll_register : fd -> fd -> unit = "ocaml_epoll_register"
+  external epoll_register : fd -> int -> fd -> unit = "ocaml_epoll_register"
   (* timeout=-1 means no timeout, res=-1 means no events *)
   external epoll_wait_one : fd -> int -> int = "ocaml_epoll_wait_one"
 
@@ -51,11 +55,25 @@ module Epoll = struct
     let epfd = epoll_create () in
     { epfd; managed = Hashtbl.create 0 }
 
-  let register manager fd =
-    epoll_register manager.epfd fd;
+  let register_read manager fd =
+    epoll_register manager.epfd 1 fd;
     Unix.set_nonblock fd;
     let res = { manager; fd; awaiters = [] } in
-    Hashtbl.add manager.managed fd res;
+    Hashtbl.add manager.managed fd (SomeManagedFd res);
+    res
+
+  let register_write manager fd =
+    epoll_register manager.epfd 2 fd;
+    Unix.set_nonblock fd;
+    let res = { manager; fd; awaiters = [] } in
+    Hashtbl.add manager.managed fd (SomeManagedFd res);
+    res
+
+  let register_readwrite manager fd =
+    epoll_register manager.epfd 3 fd;
+    Unix.set_nonblock fd;
+    let res = { manager; fd; awaiters = [] } in
+    Hashtbl.add manager.managed fd (SomeManagedFd res);
     res
 
   let stdin = ref None
@@ -63,7 +81,7 @@ module Epoll = struct
   let get_stdin () =
     match !stdin with
     | None ->
-      let res = register (get_ctx ()).ep Unix.stdin in
+      let res = register_read (get_ctx ()).ep Unix.stdin in
       stdin := Some res;
       res
     | Some res -> res
@@ -82,7 +100,7 @@ module Epoll = struct
       | -1 -> Effect.perform (WithCont (fun k -> ctx.sched k ()))
       | fd ->
         let fd : fd = Obj.magic fd in
-        let managed = Hashtbl.find ctx.ep.managed fd in
+        let SomeManagedFd managed = Hashtbl.find ctx.ep.managed fd in
         let awaiters = managed.awaiters in
         managed.awaiters <- [];
         List.iter (fun k -> ctx.sched k ()) awaiters
@@ -90,7 +108,7 @@ module Epoll = struct
 end
 
 module Timer = struct
-  type t = Epoll.managed_fd
+  type t = [ `R ] Epoll.managed_fd
 
   external timerfd_create : unit -> Epoll.fd = "ocaml_timerfd_create"
   external timerfd_settime : Epoll.fd -> int -> int -> unit = "ocaml_timerfd_settime"
@@ -104,7 +122,7 @@ module Timer = struct
     and nanosecs = Int.of_float (1e9 *. fr) in
     timerfd_settime fd secs nanosecs;
 
-    Epoll.register ctx.ep fd
+    Epoll.register_read ctx.ep fd
 
   let wait timer =
     let buf = Bytes.create 8 in

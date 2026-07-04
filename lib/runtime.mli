@@ -35,17 +35,26 @@ module Epoll : sig
   (** An epollfd "manager" *)
   type t
 
+  (** A managed fd. ['a] is an extensible variant type denoting which operations are allowed *)
+  type 'a managed_fd constraint 'a = [< `R | `W ]
+
   (** A managed fd *)
-  type managed_fd
+  type some_managed_fd = SomeManagedFd : [< `R | `W ] managed_fd -> some_managed_fd
 
   (** Registers the given fd with the epoll manager and sets it to nonblocking mode *)
-  val register : t -> fd -> managed_fd
+  val register_read : t -> fd -> [ `R ] managed_fd
+
+  (** Registers the given fd with the epoll manager and sets it to nonblocking mode *)
+  val register_write : t -> fd -> [ `W ] managed_fd
+
+  (** Registers the given fd with the epoll manager and sets it to nonblocking mode *)
+  val register_readwrite : t -> fd -> [ `R | `W ] managed_fd
 
   (** Reads up to [count] bytes into [buf] asynchronously *)
-  val read : fd:managed_fd -> buf:bytes -> count:int -> int
+  val read : fd:[> `R ] managed_fd -> buf:bytes -> count:int -> int
 
   (** Returns a {!managed_fd} for the standard input file *)
-  val get_stdin : unit -> managed_fd
+  val get_stdin : unit -> [ `R ] managed_fd
 end
 
 (** Contains useful things *)

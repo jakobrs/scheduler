@@ -11,10 +11,13 @@ CAMLprim value ocaml_epoll_create(value unit) {
     CAMLreturn(Val_int(fd));
 }
 
-CAMLprim value ocaml_epoll_register(value epfd, value fd) {
+CAMLprim value ocaml_epoll_register(value epfd, value flags, value fd) {
     CAMLparam2(epfd, fd);
+    int events = 0;
+    if (Int_val(flags) & 1) events |= EPOLLIN;
+    if (Int_val(flags) & 2) events |= EPOLLOUT;
     epoll_event ev = {
-        .events = EPOLLET | EPOLLIN,
+        .events = EPOLLET | events,
         .data = {
             .fd = Int_val(fd),
         },
