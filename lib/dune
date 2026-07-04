@@ -1,4 +1,4 @@
 (library
  (name scheduler)
  (libraries unix)
- (foreign_stubs (language c) (names bindings)))
+ (foreign_stubs (language cxx) (names bindings)))

@@ -1,5 +1,3 @@
-[@@@ warnerror "-26"]
-
 module Runtime : sig
   module Promise : sig
     type 'a t
@@ -146,8 +144,9 @@ end = struct
       let ctx = get_ctx () in
       let fd = timerfd_create () in
 
-      let secs = Int.of_float interval in
-      let nanosecs = Int.of_float (1_000_000_000. *. (interval -. Float.of_int secs)) in
+      let (fr, secs) = Float.modf interval in
+      let secs = Int.of_float secs
+      and nanosecs = Int.of_float (1e9 *. fr) in
       timerfd_settime fd secs nanosecs;
 
       Epoll.register ctx.ep fd
