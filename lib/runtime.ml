@@ -79,19 +79,25 @@ module Epoll = struct
   let stdin = lazy (register_read (get_ctx ()).ep Unix.stdin)
   let stdout = lazy (register_write (get_ctx ()).ep Unix.stdout)
 
-  let rec read ~fd ~buf ~count =
-    match Unix.read fd.fd buf 0 count with
-    | n -> n
-    | exception Unix.Unix_error (Unix.EAGAIN, _, _) ->
+  let rec async ~fd ~(f : unit -> 'a) : 'a =
+    try f () with
+    | Unix.Unix_error (Unix.EAGAIN, _, _) ->
       Effect.perform (WithCont (fun k -> fd.awaiters <- k :: fd.awaiters));
-      read ~fd ~buf ~count
+      async ~fd ~f
 
-  let rec write ~fd ~buf ~count =
-    match Unix.write fd.fd buf 0 count with
-    | n -> n
-    | exception Unix.Unix_error (Unix.EAGAIN, _, _) ->
-      Effect.perform (WithCont (fun k -> fd.awaiters <- k :: fd.awaiters));
-      write ~fd ~buf ~count
+  let read ~fd ~buf ~count = async ~fd ~f:(fun () -> Unix.read fd.fd buf 0 count)
+  let write ~fd ~buf ~from ~count = async ~fd ~f:(fun () -> Unix.write fd.fd buf from count)
+
+  let rec write_all ~fd ~buf ~from ~count =
+    if count = 0 then
+      ()
+    else
+      let n = write ~fd ~buf ~from ~count in
+      write_all ~fd ~buf ~from:(from + n) ~count:(count - n)
+
+  let accept ~fd =
+    let client, addr = async ~fd ~f:(fun () -> Unix.accept ~cloexec:true fd.fd) in
+    register_readwrite fd.manager client, addr
 
   let task ctx =
     while !(ctx.live_tasks) > 1 do
@@ -105,6 +111,18 @@ module Epoll = struct
         managed.awaiters <- [];
         List.iter (fun k -> ctx.sched k ()) awaiters
     done
+end
+
+module Tcp = struct
+  type listener = [ `R ] Epoll.managed_fd
+
+  let listen ~addr ~port : listener =
+    let sock = Unix.socket ~cloexec:true Unix.PF_INET Unix.SOCK_STREAM 0 in
+    Unix.bind sock (Unix.ADDR_INET (addr, port));
+    Unix.listen sock 10;
+    Epoll.register_read (get_ctx ()).ep sock
+
+  let accept l = Epoll.accept ~fd:l
 end
 
 module Timer = struct

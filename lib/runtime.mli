@@ -54,7 +54,9 @@ module Epoll : sig
   val read : fd:[> `R ] managed_fd -> buf:bytes -> count:int -> int
 
   (** Writes up to [count] bytes from [buf] asynchronously *)
-  val write : fd:[> `W ] managed_fd -> buf:bytes -> count:int -> int
+  val write : fd:[> `W ] managed_fd -> buf:bytes -> from:int -> count:int -> int
+
+  val write_all : fd:[> `W ] managed_fd -> buf:bytes -> from:int -> count:int -> unit
 
   val stdin : [ `R ] managed_fd Lazy.t
   val stdout : [ `W ] managed_fd Lazy.t
@@ -80,6 +82,14 @@ module Timer : sig
 
   (** Waits for the timer to tick *)
   val wait : t -> unit
+end
+
+module Tcp : sig
+  type listener
+
+  val listen : addr:Unix.inet_addr -> port:int -> listener
+
+  val accept : listener -> [ `R | `W ] Epoll.managed_fd * Unix.sockaddr
 end
 
 module Prelude : sig

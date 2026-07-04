@@ -1,8 +1,25 @@
 open Scheduler
 
+let server () =
+  let open Runtime.Prelude in
+  let module Tcp = Runtime.Tcp in
+  let listener = Tcp.listen ~addr:(Unix.inet_addr_of_string "127.0.0.1") ~port:8080 in
+  while true do
+    let client, addr = Tcp.accept listener in
+    Runtime.spawn_u begin fun () ->
+      let buf = Bytes.create 1024 in
+      while true do
+        let n = Epoll.read ~fd:client ~buf ~count:1024 in
+        Epoll.write_all ~fd:client ~buf ~from:0 ~count:n
+      done
+    end ()
+  done
+
 let f () =
   let open Runtime.Prelude in
   let module Timer = Runtime.Timer in
+
+  Runtime.spawn_u server ();
 
   let stdin = Lazy.force Epoll.stdin in
   let buf = Bytes.create 20 in
@@ -13,7 +30,7 @@ let f () =
     let stdout = Lazy.force Epoll.stdout in
     while true do
       let n = Epoll.read ~fd:stdin ~buf ~count:20 in
-      ignore @@ Epoll.write ~fd:stdout ~buf ~count:n
+      ignore @@ Epoll.write ~fd:stdout ~buf ~from:0 ~count:n
     done
   end ();
 
