@@ -36,7 +36,7 @@ module Epoll : sig
   type t
 
   (** A managed fd. ['a] is an extensible variant type denoting which operations are allowed *)
-  type 'a managed_fd constraint 'a = [< `R | `W ]
+  type !-'a managed_fd constraint 'a = [< `R | `W ]
 
   (** A managed fd *)
   type some_managed_fd = SomeManagedFd : [< `R | `W ] managed_fd -> some_managed_fd

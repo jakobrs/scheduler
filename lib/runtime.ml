@@ -1,7 +1,7 @@
 open Effect.Shallow
 
 type _epoll_manager = { epfd : Unix.file_descr; managed : (Unix.file_descr, _some_managed_fd) Hashtbl.t }
-and 'a _managed_fd = { manager : _epoll_manager; fd : Unix.file_descr; mutable awaiters : (unit, unit) continuation list }
+and !-'a _managed_fd = { manager : _epoll_manager; fd : Unix.file_descr; mutable awaiters : (unit, unit) continuation list }
   constraint 'a = [< `R | `W ]
 and _some_managed_fd = SomeManagedFd : [< `R | `W ] _managed_fd -> _some_managed_fd
 
@@ -42,7 +42,7 @@ module Epoll = struct
   type fd = Unix.file_descr
 
   type t = _epoll_manager = { epfd : fd; managed : (fd, some_managed_fd) Hashtbl.t }
-  and 'a managed_fd = 'a _managed_fd = { manager : t; fd : fd; mutable awaiters : (unit, unit) continuation list }
+  and !-'a managed_fd = 'a _managed_fd = { manager : t; fd : fd; mutable awaiters : (unit, unit) continuation list }
     constraint 'a = [< `R | `W ]
   and some_managed_fd = _some_managed_fd = SomeManagedFd : [< `R | `W ] managed_fd -> some_managed_fd
 
