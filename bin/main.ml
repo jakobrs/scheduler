@@ -4,7 +4,7 @@ let f () =
   let open Runtime.Prelude in
   let module Timer = Runtime.Timer in
 
-  let stdin = Epoll.get_stdin () in
+  let stdin = Lazy.force Epoll.stdin in
   let buf = Bytes.create 20 in
   let n = Epoll.read ~fd:stdin ~buf ~count:10 in
   Printf.printf "Read %d bytes\n%!" n;

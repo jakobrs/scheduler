@@ -55,36 +55,29 @@ module Epoll = struct
     let epfd = epoll_create () in
     { epfd; managed = Hashtbl.create 0 }
 
-  let register_read manager fd =
+  let register_read manager fd : [ `R ] managed_fd =
     epoll_register manager.epfd 1 fd;
     Unix.set_nonblock fd;
     let res = { manager; fd; awaiters = [] } in
     Hashtbl.add manager.managed fd (SomeManagedFd res);
     res
 
-  let register_write manager fd =
+  let register_write manager fd : [ `W ] managed_fd =
     epoll_register manager.epfd 2 fd;
     Unix.set_nonblock fd;
     let res = { manager; fd; awaiters = [] } in
     Hashtbl.add manager.managed fd (SomeManagedFd res);
     res
 
-  let register_readwrite manager fd =
+  let register_readwrite manager fd : [ `R | `W ] managed_fd =
     epoll_register manager.epfd 3 fd;
     Unix.set_nonblock fd;
     let res = { manager; fd; awaiters = [] } in
     Hashtbl.add manager.managed fd (SomeManagedFd res);
     res
 
-  let stdin = ref None
-
-  let get_stdin () =
-    match !stdin with
-    | None ->
-      let res = register_read (get_ctx ()).ep Unix.stdin in
-      stdin := Some res;
-      res
-    | Some res -> res
+  let stdin = lazy (register_read (get_ctx ()).ep Unix.stdin)
+  let stdout = lazy (register_write (get_ctx ()).ep Unix.stdout)
 
   let rec read ~fd ~buf ~count =
     match Unix.read fd.fd buf 0 count with
@@ -92,6 +85,13 @@ module Epoll = struct
     | exception Unix.Unix_error (Unix.EAGAIN, _, _) ->
       Effect.perform (WithCont (fun k -> fd.awaiters <- k :: fd.awaiters));
       read ~fd ~buf ~count
+
+  let rec write ~fd ~buf ~count =
+    match Unix.write fd.fd buf 0 count with
+    | n -> n
+    | exception Unix.Unix_error (Unix.EAGAIN, _, _) ->
+      Effect.perform (WithCont (fun k -> fd.awaiters <- k :: fd.awaiters));
+      write ~fd ~buf ~count
 
   let task ctx =
     while !(ctx.live_tasks) > 1 do

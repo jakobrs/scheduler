@@ -53,8 +53,11 @@ module Epoll : sig
   (** Reads up to [count] bytes into [buf] asynchronously *)
   val read : fd:[> `R ] managed_fd -> buf:bytes -> count:int -> int
 
-  (** Returns a {!managed_fd} for the standard input file *)
-  val get_stdin : unit -> [ `R ] managed_fd
+  (** Writes up to [count] bytes from [buf] asynchronously *)
+  val write : fd:[> `W ] managed_fd -> buf:bytes -> count:int -> int
+
+  val stdin : [ `R ] managed_fd Lazy.t
+  val stdout : [ `W ] managed_fd Lazy.t
 end
 
 (** Contains useful things *)
