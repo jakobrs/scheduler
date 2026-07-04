@@ -1,4 +1,4 @@
-open Scheduler.Sched
+open Scheduler
 
 let f () =
   let open Runtime.Prelude in
